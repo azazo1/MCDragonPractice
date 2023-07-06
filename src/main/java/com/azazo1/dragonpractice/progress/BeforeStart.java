@@ -5,6 +5,9 @@ import com.azazo1.dragonpractice.MyLog;
 import net.kyori.adventure.text.Component;
 import org.bukkit.*;
 import org.bukkit.block.Block;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -12,6 +15,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -22,7 +26,7 @@ import java.util.LinkedList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class BeforeStart extends Progress implements Listener {
+public class BeforeStart extends Progress implements Listener, CommandExecutor {
     HashMap<Player, Boolean> players = new HashMap<>(); // 用以标记玩家是否准备
     Block switchBlock; // 用于标记准备按钮（拉杆）
     World overworld; // 主世界
@@ -51,7 +55,7 @@ public class BeforeStart extends Progress implements Listener {
             return;
         }
 
-        boolean allPrepared = players.size() != 0;
+        boolean allPrepared = players.size() != 0 && players.size() == Bukkit.getOnlinePlayers().size(); // 要有玩家且全部在线玩家得到登记时才能检测
         for (Player player : players.keySet()) {
             if (!players.get(player)) {
                 allPrepared = false;
@@ -150,6 +154,8 @@ public class BeforeStart extends Progress implements Listener {
         switchBlock.setType(Material.LEVER);
 
         Bukkit.getPluginManager().registerEvents(this, plugin);
+        //noinspection DataFlowIssue
+        Bukkit.getPluginCommand("start").setExecutor(this);
         update();// 启动循环
     }
 
@@ -165,6 +171,8 @@ public class BeforeStart extends Progress implements Listener {
         }
         resetEndWorld();
         teleportPlayer();
+        //noinspection DataFlowIssue
+        Bukkit.getPluginCommand("start").setExecutor(null);
         alive.set(false);
     }
 
@@ -234,7 +242,7 @@ public class BeforeStart extends Progress implements Listener {
             }
             Bukkit.getOnlinePlayers().forEach(p -> {
                 if (!players.getOrDefault(p, false)) {
-                    sb.append(p.getName()).append("\n");
+                    sb.append(p.getName()).append(", ");
                 }
             });
             MyLog.i(sb.toString());
@@ -268,6 +276,7 @@ public class BeforeStart extends Progress implements Listener {
             Files.walkFileTree(tempEndDir, new SimpleFileVisitor<>() {
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    //noinspection ResultOfMethodCallIgnored
                     file.toFile().delete();
                     plugin.getLogger().info("删除文件: " + file);
                     return FileVisitResult.CONTINUE;
@@ -275,6 +284,7 @@ public class BeforeStart extends Progress implements Listener {
 
                 @Override
                 public FileVisitResult postVisitDirectory(Path dir, IOException exc) { // 删除空文件夹
+                    //noinspection ResultOfMethodCallIgnored
                     dir.toFile().delete();
                     plugin.getLogger().info("删除文件夹: " + dir);
                     return FileVisitResult.CONTINUE;
@@ -291,5 +301,19 @@ public class BeforeStart extends Progress implements Listener {
         MyLog.i("末地已重置");
         endWorld.setGameRule(GameRule.KEEP_INVENTORY, true);
         MyLog.i("末地死亡不掉落已设置");
+    }
+
+    @Override
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+        if (!alive.get()) {
+            MyLog.e("该 BeforeStart 状态已关闭！");
+            return true;
+        }
+        if (label.equals("start")) {
+            // 让所有人准备
+            Bukkit.getOnlinePlayers().forEach(player -> players.put(player, true));
+            MyLog.i("%s 让所有玩家准备了".formatted(sender.getName()));
+        }
+        return false;
     }
 }

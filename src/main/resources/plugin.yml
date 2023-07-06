@@ -2,3 +2,9 @@ name: DragonPractice
 version: '${project.version}'
 main: com.azazo1.dragonpractice.DragonPractice
 api-version: '1.20'
+
+commands:
+  start:
+    description: 开始倒计时，准备进入战场
+  stopfight:
+    description: 让fighting状态标志为失败，结束战斗

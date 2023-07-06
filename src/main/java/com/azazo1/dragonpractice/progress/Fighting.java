@@ -9,6 +9,9 @@ import org.bukkit.World;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
 import org.bukkit.boss.BossBar;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Arrow;
 import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.Player;
@@ -19,6 +22,7 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
@@ -29,7 +33,7 @@ import java.util.LinkedList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class Fighting extends Progress implements Listener {
+public class Fighting extends Progress implements Listener, CommandExecutor {
     protected BeforeStart lastProgress;
     protected final AtomicLong sessionStartTime = new AtomicLong(System.currentTimeMillis());
     protected final LeftTimeBossBar leftTimeBossBar = new LeftTimeBossBar();
@@ -128,6 +132,8 @@ public class Fighting extends Progress implements Listener {
         }
         MyLog.i("你们已进入一级战备状态。加油，特种兵！");
         Bukkit.getPluginManager().registerEvents(this, plugin);
+        //noinspection DataFlowIssue
+        Bukkit.getPluginCommand("stopfight").setExecutor(this);
         findEnderDragon();
         update();
     }
@@ -305,7 +311,7 @@ public class Fighting extends Progress implements Listener {
      */
     @EventHandler
     public void onEntityDamageByEntityEvent(@NotNull EntityDamageByEntityEvent e) {
-        if (!alive.get()) { //todo弓箭
+        if (!alive.get()) {
             return;
         }
         double damage = e.getDamage();
@@ -342,6 +348,18 @@ public class Fighting extends Progress implements Listener {
     }
 
     /**
+     * 将重生的玩家传送到末地, 防止因方块阻挡而使复活点变成主世界
+     */
+    @EventHandler
+    public void onPlayerRespawn(PlayerRespawnEvent e) {
+        if (!alive.get() || fightOver.get()) {
+            return;
+        }
+        Bukkit.getScheduler().runTask(plugin, () -> e.getPlayer().teleport(endWorld.getSpawnLocation()));
+        MyLog.i("重生的 %s 被传送到末地".formatted(e.getPlayer().getName()));
+    }
+
+    /**
      * 检测末影龙死亡事件
      */
     @EventHandler
@@ -353,7 +371,6 @@ public class Fighting extends Progress implements Listener {
             Player killer = enderDragon.getKiller();
             if (killer == null) {
                 MyLog.i("神秘玩家击杀末影龙, 末影龙死亡！！！");
-
             } else {
                 MyLog.i("玩家 %s 击杀末影龙, 末影龙死亡！！！".formatted(killer.getName()));
 
@@ -388,6 +405,19 @@ public class Fighting extends Progress implements Listener {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Override
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+        if (!alive.get()) {
+            MyLog.e("该 Fighting 状态已关闭！");
+            return true;
+        }
+        if (label.equals("stopfight")) {
+            MyLog.i("%s 通过指令结束对战".formatted(sender.getName()));
+            onFightEnd(false);
+        }
+        return false;
     }
 
     public class LeftTimeBossBar {

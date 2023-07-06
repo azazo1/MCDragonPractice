@@ -1,6 +1,7 @@
 package com.azazo1.dragonpractice.progress;
 
 import com.azazo1.dragonpractice.MyLog;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -40,6 +41,7 @@ public class Fighting extends Progress implements Listener {
     protected HashMap<Player, Double> playerDamageToEnderDragon = new HashMap<>(); // 玩家对末影龙造成的积累伤害
     protected HashMap<Player, Double> playerGetDamage = new HashMap<>(); // 玩家受伤统计
     protected final AtomicBoolean alive = new AtomicBoolean(true);
+    protected final AtomicBoolean fightOver = new AtomicBoolean(false); // 对战是否结束（即胜负是否已分）
     protected World endWorld; // 临时创建的末地
     protected EnderDragon enderDragon; //末影龙
     protected Location spawnLocationInOverWorld; // 主世界的重生点
@@ -86,6 +88,10 @@ public class Fighting extends Progress implements Listener {
         if (System.currentTimeMillis() - sessionStartTime.get() > fightDuration) {
             MyLog.i("时间耗尽，对战结束");
             onFightEnd(false);
+        }
+        if (enderDragon.getHealth() <= 0) {
+            MyLog.i("末影龙被神秘力量杀死！");
+            onFightEnd(true);
         }
         Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, this::update, 20);
     }
@@ -260,7 +266,7 @@ public class Fighting extends Progress implements Listener {
      */
     @EventHandler
     public void onPlayerDeath(@NotNull PlayerDeathEvent e) {
-        if (!alive.get()) {
+        if (!alive.get() || fightOver.get()) {
             return;
         }
         Player player = e.getPlayer();
@@ -321,8 +327,14 @@ public class Fighting extends Progress implements Listener {
     /**
      * 玩家退出直接标记为死亡
      */
+    @EventHandler
     public void onPlayerQuit(PlayerQuitEvent e) {
-        // todo 标记这名玩家死亡
+        Player player = e.getPlayer();
+        if (playerLife.containsKey(player)) {
+            playerLife.replace(player, 1); // 调用 onPlayerDeath 时生命数会将为0
+            MyLog.e("玩家: %s 退出, 生命数降为0.");
+            onPlayerDeath(new PlayerDeathEvent(player, new LinkedList<>(), 0, Component.text("玩家退出")));
+        }
     }
 
     /**
@@ -354,6 +366,7 @@ public class Fighting extends Progress implements Listener {
      * @param suc 是否胜利
      */
     public void onFightEnd(boolean suc) {
+        fightOver.set(true);
         if (suc) {
             MyLog.i("对战胜利");
             recoverPlayers();

@@ -8,6 +8,7 @@ import org.bukkit.World;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
 import org.bukkit.boss.BossBar;
+import org.bukkit.entity.Arrow;
 import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -16,6 +17,7 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
@@ -293,7 +295,7 @@ public class Fighting extends Progress implements Listener {
      */
     @EventHandler
     public void onEntityDamageByEntityEvent(@NotNull EntityDamageByEntityEvent e) {
-        if (!alive.get()) {
+        if (!alive.get()) { //todo弓箭
             return;
         }
         double damage = e.getDamage();
@@ -303,12 +305,24 @@ public class Fighting extends Progress implements Listener {
             playerDamageToEnderDragon.replace(player, playerDamageToEnderDragon.get(player) + damage);
         } else if (e.getEntity().getEntityId() == enderDragon.getEntityId()) {
             double health = enderDragon.getHealth() - damage; // 这里似乎血量时延迟改变的这一帧仍然是扣血前的血量
-            MyLog.i("神秘力量对末影龙造成 %d 点伤害, 末影龙剩余血量: %d".formatted((int) damage, (int) health));
+            if (e.getDamager() instanceof Arrow arrow && arrow.getShooter() instanceof Player player) {
+                MyLog.i("玩家 %s 用弓箭对末影龙造成 %d 点伤害, 末影龙剩余血量: %d".formatted(player.getName(), (int) damage, (int) health));
+                playerDamageToEnderDragon.replace(player, playerDamageToEnderDragon.get(player) + damage);
+            } else {
+                MyLog.i("神秘力量对末影龙造成 %d 点伤害, 末影龙剩余血量: %d".formatted((int) damage, (int) health));
+            }
         } else if (e.getEntity() instanceof Player player && playerGetDamage.containsKey(player)) {
             playerGetDamage.replace(player, playerGetDamage.get(player) + damage);
             double health = player.getHealth() - damage; // 这里似乎血量时延迟改变的这一帧仍然是扣血前的血量
             MyLog.i("玩家 %s 收到 %d 点伤害, 剩余血量: %d".formatted(player.getName(), (int) damage, (int) health));
         }
+    }
+
+    /**
+     * 玩家退出直接标记为死亡
+     */
+    public void onPlayerQuit(PlayerQuitEvent e) {
+        // todo 标记这名玩家死亡
     }
 
     /**

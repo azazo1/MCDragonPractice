@@ -13,11 +13,9 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
+import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -282,6 +280,7 @@ public class BeforeStart extends Progress implements Listener {
                     return FileVisitResult.CONTINUE;
                 }
             });
+        } catch (FileNotFoundException | NoSuchFileException ignore) {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

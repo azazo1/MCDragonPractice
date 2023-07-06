@@ -89,9 +89,13 @@ public class Fighting extends Progress implements Listener {
             MyLog.i("时间耗尽，对战结束");
             onFightEnd(false);
         }
-        if (enderDragon.getHealth() <= 0) {
-            MyLog.i("末影龙被神秘力量杀死！");
-            onFightEnd(true);
+        if (enderDragon != null) { // 原有的末影龙引用还在，但有可能真实的消失了
+            EnderDragon dragon = endWorld.getEntitiesByClass(EnderDragon.class).stream().findFirst().orElse(null);  // 搜寻世界上的末影龙
+            if (dragon == null) {
+                // 找不到末影龙，说明末影龙消失了，即死亡了
+                MyLog.i("末影龙被神秘力量杀死！");
+                onFightEnd(true);
+            }
         }
         Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, this::update, 20);
     }

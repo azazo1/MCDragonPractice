@@ -1,5 +1,5 @@
 name: DragonPractice
-version: '${project.version}'
+version: '1.1'
 main: com.azazo1.dragonpractice.DragonPractice
 api-version: '1.20'
 

@@ -3,6 +3,7 @@ package com.azazo1.dragonpractice.progress;
 import com.azazo1.dragonpractice.MyLog;
 import net.kyori.adventure.sound.Sound;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -37,14 +38,15 @@ public class Fighting extends Progress implements Listener, CommandExecutor {
     protected BeforeStart lastProgress;
     protected final AtomicLong sessionStartTime = new AtomicLong(System.currentTimeMillis());
     protected final LeftTimeBossBar leftTimeBossBar = new LeftTimeBossBar();
-    protected static final long fightDuration = 1000 * 60 * 15; // 本局战斗最长的时长
+    protected static final long fightDuration = 1000 * 60 * 15; // 本局战斗最长的时长 毫秒
     protected static final int healthIncreasePerDeath = 50; // 玩家每次死亡末影龙增加的血量
     protected static final int maxPlayerLife = 5; // 玩家最大生命数量
     protected static final int sucWaitingSeconds = 30; // 玩家对局成功后在末地等待的时间
     protected static final int irritateEnderManHealth = 10; // 末影龙濒危血量阈值，末影龙在低于该血量时会号召所有末影人让他们朝玩家攻击
-    protected static final int irritateEnderManAmountPerPlayer = 5; // 对于每个玩家，末影龙号召末影人的数量
-    protected static final int fireBallIntervalSeconds = 5; // 末影龙在濒危血量下每发火球发射间隔时间
-    protected static final int fireBallVelocity = 5; // 末影龙在濒危血量下发射的火球的飞行速度 m/s
+    protected static final int irritateEnderManAmountPerPlayer = 2; // 对于每个玩家，末影龙号召末影人的数量
+    protected static final int fireBallIntervalSeconds = 10; // 末影龙在濒危血量下每发火球发射间隔时间 秒
+    protected static final int fireBallVelocity = 1; // 末影龙在濒危血量下发射的火球的飞行速度 m/s
+    protected static final int reviveCrystalAmount = 2; // 末影龙在濒危血量下复活的水晶数量
     protected HashMap<Player, Integer> playerLife = new HashMap<>(); // 玩家剩余生命数量
     protected HashMap<Player, Double> playerDamageToEnderDragon = new HashMap<>(); // 玩家对末影龙造成的积累伤害
     protected HashMap<Player, Double> playerGetDamage = new HashMap<>(); // 玩家受伤统计
@@ -57,6 +59,7 @@ public class Fighting extends Progress implements Listener, CommandExecutor {
     protected double enderDragonMaxHealth; // 末影龙最大血量
     protected FightResult result;
     protected HashSet<Enderman> freeOfDragonBreath = new HashSet<>(); // 免受龙息伤害的末影人（末影龙号召的末影人不会受龙息伤害）
+    protected HashSet<EnderCrystal> initialCrystal = new HashSet<>(); // 记录初始的末影水晶，用于后阶段末影龙复活末影水晶
 
     public Fighting(JavaPlugin plugin) {
         super(plugin);
@@ -108,13 +111,13 @@ public class Fighting extends Progress implements Listener, CommandExecutor {
             } else {
                 if (dragon.getHealth() < irritateEnderManHealth && !enderManIrritated.get()) {
                     irritateEnderMan();
-
                     Location location = enderDragon.getLocation();
                     location.setY(location.getY() + 50);
                     enderDragon.teleport(location);
                     MyLog.i("末影龙迅速飞升");
                     MyLog.i("末影龙发射火球频率增加，每 %d 秒发射一次".formatted(fireBallIntervalSeconds));
                     fireBallFrequently();
+                    reviveCrystal();
                 }
             }
         }
@@ -122,7 +125,30 @@ public class Fighting extends Progress implements Listener, CommandExecutor {
     }
 
     /**
-     * 末影龙在极低生命值时会增加发射火球的频率
+     * 复活(增加)一定数量的末影水晶
+     */
+    protected void reviveCrystal() {
+        HashSet<EnderCrystal> revived = new HashSet<>();
+        HashSet<Location> revivedLocation = new HashSet<>();
+        EnderCrystal[] crystals = initialCrystal.toArray(new EnderCrystal[0]);
+        while (revived.size() < reviveCrystalAmount) {
+            EnderCrystal crystal = crystals[new Random().nextInt(0, crystals.length)]; // 随机选一个位置
+            if (!revived.contains(crystal)) { // 在原有的基础上增加
+                Location location = crystal.getLocation();
+                revivedLocation.add(location);
+                endWorld.spawn(location, crystal.getClass()); // 重生
+                revived.add(crystal); // 计数
+            }
+        }
+        StringBuilder message = new StringBuilder("末影龙复活 %d 个水晶，位于 ".formatted(reviveCrystalAmount));
+        for (Location location : revivedLocation) {
+            message.append("[").append(location.getBlockX()).append(", ").append(location.getBlockY()).append(", ").append(location.getBlockZ()).append("] ");
+        }
+        MyLog.i(message.toString());
+    }
+
+    /**
+     * 增加发射火球的频率
      */
     protected void fireBallFrequently() {
         if (!alive.get()) {
@@ -130,7 +156,8 @@ public class Fighting extends Progress implements Listener, CommandExecutor {
             return;
         }
         // 随机选择一个玩家
-        Player randomChosen = (Player) playerLife.keySet().toArray()[new Random().nextInt(0, playerLife.size())];
+        Player randomChosen = (Player) playerLife.keySet().stream().filter(player -> !player.isDead() && player.getGameMode() == GameMode.SURVIVAL) // 只向生存模式存活的玩家发射火球
+                .toArray()[new Random().nextInt(0, playerLife.size())];
         Location endLocation = randomChosen.getLocation();
         Location startLocation = enderDragon.getEyeLocation();
         // 取两个location的中点 防止火球被末影龙自己干掉
@@ -149,27 +176,33 @@ public class Fighting extends Progress implements Listener, CommandExecutor {
     }
 
     /**
-     * 末影龙进入超残血状态：
+     * 末影龙进入超残血状态：(只会触发一次)
      * 1. 号召一定数量的末影人
-     * 2. 取消栖息
+     * 2. 迅速上升
      * 3. 增大喷火球的频率
+     * 4. 复活一定数量末影水晶
      */
     protected void irritateEnderMan() {
         enderManIrritated.set(true);
-        Collection<Enderman> enderMen = endWorld.getEntitiesByClass(Enderman.class);
-        int expectedToCallAmount = playerLife.size() * irritateEnderManAmountPerPlayer;
         int calledAmount = 0;
-        for (Enderman enderman : enderMen) {
-            if (calledAmount >= expectedToCallAmount) {
-                break;
+        for (Player player : playerLife.keySet()) {
+            int irritatedEnderman = 0;
+            Collection<Enderman> enderMen = endWorld.getEntitiesByClass(Enderman.class);
+            enderMen = enderMen.stream().sorted(Comparator.comparingDouble(o -> o.getLocation().distance(player.getLocation()))).toList(); // 按距离排序
+            for (Enderman enderman : enderMen) {
+                if (irritatedEnderman < irritateEnderManAmountPerPlayer && !freeOfDragonBreath.contains(enderman)) { // 数量不够且没被添加过
+                    irritatedEnderman++;
+                    freeOfDragonBreath.add(enderman);
+                    enderman.setScreaming(true);
+                    enderman.setHasBeenStaredAt(true);
+                    enderman.setTarget(player);
+                    enderman.customName(Component.text("发怒的末影人").color(TextColor.color(255, 0, 0)));
+                    enderman.setCustomNameVisible(true);
+                }
             }
-            Player randomChosen = (Player) playerLife.keySet().toArray()[new Random().nextInt(0, playerLife.size())];
-            enderman.setScreaming(true);
-            enderman.setHasBeenStaredAt(true);
-            enderman.setTarget(randomChosen);
-            freeOfDragonBreath.add(enderman); // 不受龙息伤害的末影人
-            calledAmount++;
+            calledAmount += irritatedEnderman;
         }
+
         MyLog.i("末影龙号召 %d 个末影人攻击玩家！".formatted(calledAmount));
     }
 
@@ -274,6 +307,8 @@ public class Fighting extends Progress implements Listener, CommandExecutor {
         }
         enderDragonMaxHealth = enderDragon.getHealth();
         MyLog.i("末影龙最大血量: " + enderDragonMaxHealth);
+        initialCrystal.addAll(endWorld.getEntitiesByClass(EnderCrystal.class)); // 获取末影水晶
+        MyLog.i("末影水晶数量: " + initialCrystal.size());
     }
 
     /**
@@ -377,7 +412,6 @@ public class Fighting extends Progress implements Listener, CommandExecutor {
 
     /**
      * 统计玩家收到的伤害<br>
-     * 消除被号召末影人收到龙息的伤害
      */
     @EventHandler
     public void onEntityDamageEvent(@NotNull EntityDamageEvent e) {
@@ -389,13 +423,12 @@ public class Fighting extends Progress implements Listener, CommandExecutor {
             playerGetDamage.replace(player, playerGetDamage.get(player) + damage);
             double health = player.getHealth() - damage; // 这里似乎血量时延迟改变的这一帧仍然是扣血前的血量
             MyLog.i("玩家 %s 收到 %d 点伤害, 剩余血量: %d".formatted(player.getName(), (int) damage, (int) health));
-        } else if (e.getEntity() instanceof Enderman enderman && freeOfDragonBreath.contains(enderman)) {
-            e.setCancelled(true);
         }
     }
 
     /**
      * 统计玩家对末影龙造成的伤害
+     * 消除被号召末影人收到龙息的伤害
      */
     @EventHandler
     public void onEntityDamageByEntityEvent(@NotNull EntityDamageByEntityEvent e) {
@@ -415,6 +448,8 @@ public class Fighting extends Progress implements Listener, CommandExecutor {
             } else {
                 MyLog.i("神秘力量对末影龙造成 %d 点伤害, 末影龙剩余血量: %d".formatted((int) damage, (int) health));
             }
+        } else if (e.getEntity() instanceof Enderman enderman && freeOfDragonBreath.contains(enderman) && e.getDamager() instanceof AreaEffectCloud) { // 被号召的末影人收到龙息伤害
+            e.setCancelled(true);
         }
     }
 
@@ -423,10 +458,13 @@ public class Fighting extends Progress implements Listener, CommandExecutor {
      */
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent e) {
+        if (!alive.get() && !fightOver.get()) {
+            return;
+        }
         Player player = e.getPlayer();
         if (playerLife.containsKey(player)) {
             playerLife.replace(player, 1); // 调用 onPlayerDeath 时生命数会将为0
-            MyLog.e("玩家: %s 退出, 生命数降为0.");
+            MyLog.e("玩家: %s 退出, 生命数降为0.".formatted(player.getName()));
             onPlayerDeath(new PlayerDeathEvent(player, new LinkedList<>(), 0, Component.text("玩家退出")));
         }
     }

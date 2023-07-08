@@ -13,6 +13,56 @@ import java.util.stream.Stream;
  * 用于游戏进行时从外部配置物品
  */
 public class ItemLoader {
+    public static final String DEFAULT_ITEM_CONFIG = """
+            minecraft:iron_helmet
+            1
+            minecraft:iron_chestplate
+            1
+            minecraft:iron_leggings
+            1
+            minecraft:iron_boots
+            1
+            minecraft:iron_sword
+            1
+            minecraft:iron_pickaxe
+            1
+            minecraft:iron_axe
+            1
+            minecraft:water_bucket
+            1
+            minecraft:hay_block
+            5
+            minecraft:cobblestone
+            64
+            minecraft:cobblestone
+            64
+            minecraft:cobblestone
+            64
+            minecraft:cobblestone
+            64
+            minecraft:cooked_beef
+            32
+            minecraft:white_bed
+            1
+            minecraft:white_bed
+            1
+            minecraft:white_bed
+            1
+            minecraft:shield
+            1
+            minecraft:arrow
+            64
+            minecraft:arrow
+            64
+            minecraft:arrow
+            64
+            minecraft:arrow
+            64
+            minecraft:bow
+            1
+            minecraft:glass_bottle
+            16
+            """;
     protected final File loadFile;
 
     /**
@@ -22,8 +72,12 @@ public class ItemLoader {
         this.loadFile = new File(loadFile);
         if (!this.loadFile.exists()) {
             boolean created = this.loadFile.createNewFile();
+
             if (created) {
-                MyLog.i("新建了物品配置文件: " + this.loadFile.toPath());
+                try (PrintWriter pw = new PrintWriter(this.loadFile)) {
+                    pw.write(DEFAULT_ITEM_CONFIG);
+                }
+                MyLog.i("新建了物品配置文件: " + this.loadFile.toPath().toAbsolutePath());
             } else {
                 throw new IOException("Failed to create item config file");
             }

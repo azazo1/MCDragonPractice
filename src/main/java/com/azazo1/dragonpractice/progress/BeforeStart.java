@@ -35,7 +35,6 @@ public class BeforeStart extends Progress implements Listener, CommandExecutor {
     protected final AtomicLong countdownTime = new AtomicLong(System.currentTimeMillis()); // 倒计时开始时间
     protected final AtomicBoolean countdown = new AtomicBoolean(false); // 是否正在倒计;
     protected static final int countdownDuration = 10000; // 倒计时时长
-
     protected final AtomicBoolean alive = new AtomicBoolean(true);
     protected final ItemLoader itemLoader = new ItemLoader("items.txt");
 

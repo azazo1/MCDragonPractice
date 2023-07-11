@@ -1,6 +1,7 @@
 package com.azazo1.dragonpractice.progress;
 
 import com.azazo1.dragonpractice.MyLog;
+import com.azazo1.dragonpractice.MyNBSPlayer;
 import net.kyori.adventure.sound.Sound;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextColor;
@@ -29,6 +30,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -38,6 +40,7 @@ public class Fighting extends Progress implements Listener, CommandExecutor {
     protected BeforeStart lastProgress;
     protected final AtomicLong sessionStartTime = new AtomicLong(System.currentTimeMillis());
     protected final LeftTimeBossBar leftTimeBossBar = new LeftTimeBossBar();
+    public static final String fightBGM = "fight.nbs";
     protected static final long fightDuration = 1000 * 60 * 15; // 本局战斗最长的时长 毫秒
     protected static final int healthIncreasePerDeath = 50; // 玩家每次死亡末影龙增加的血量
     protected static final int maxPlayerLife = 5; // 玩家最大生命数量
@@ -156,8 +159,9 @@ public class Fighting extends Progress implements Listener, CommandExecutor {
             return;
         }
         // 随机选择一个玩家
-        Player randomChosen = (Player) playerLife.keySet().stream().filter(player -> !player.isDead() && player.getGameMode() == GameMode.SURVIVAL) // 只向生存模式存活的玩家发射火球
-                .toArray()[new Random().nextInt(0, playerLife.size())];
+        var filteredPlayers = playerLife.keySet().stream().filter(player -> !player.isDead() && player.getGameMode() == GameMode.SURVIVAL).toArray();
+        Player randomChosen = (Player) filteredPlayers // 只向生存模式存活的玩家发射火球
+                [new Random().nextInt(0, filteredPlayers.length)];
         Location endLocation = randomChosen.getLocation();
         Location startLocation = enderDragon.getEyeLocation();
         // 取两个location的中点 防止火球被末影龙自己干掉
@@ -238,6 +242,7 @@ public class Fighting extends Progress implements Listener, CommandExecutor {
         Bukkit.getPluginCommand("stopfight").setExecutor(this);
         findEnderDragon();
         update();
+        MyNBSPlayer.playMusic(new File(plugin.getDataFolder(), fightBGM), true);
     }
 
     /**
@@ -290,6 +295,8 @@ public class Fighting extends Progress implements Listener, CommandExecutor {
         MyLog.i(MyLog.warpWith("-", "-", totalLength));
 
         // 冒险模式在onFightEnd已设置
+
+        MyNBSPlayer.stopMusic();
 
         // 关闭剩余时间boss条
         leftTimeBossBar.close();
@@ -384,6 +391,7 @@ public class Fighting extends Progress implements Listener, CommandExecutor {
             return;
         }
         Player player = e.getPlayer();
+        player.spigot().respawn();
         if (!playerLife.containsKey(player)) {
             return;
         }
